@@ -1,0 +1,18 @@
+# Byte-code files
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Dependency management
+poetry.lock
+
+# Environment variables
+*.env
+
+# Build artifacts
+dist/
+*.egg-info/

@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "book-examples"
+version = "0.1.0"
+description = "Examples from the book chapter on Routing"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9" # Specify a Python version compatible with the libraries
+langchain = "^0.2.0"
+langgraph = "^0.1.0"
+google-cloud-aiplatform = "^1.40.0" # Required for Google ADK and accessing Google models
+langchain-google-genai = "^1.0.0" # Add Google Generative AI integration
+google-adk = "^0.1.0" # Added Google ADK dependency (version might need adjustment)
+deprecated = "^1.2.0" # Added missing dependency for google-adk
+pydantic = "^2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
