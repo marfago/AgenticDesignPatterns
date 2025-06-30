@@ -1,4 +1,4 @@
-# Agentic Design Patterns - Chapter 02: Routing Examples
+# Agentic Design Patterns - A. Gulli - Chapter 02: Routing Examples
 
 This directory contains suggested code examples for Chapter 02 ("Routing") of the "Agentic Design Patterns" book.
 
