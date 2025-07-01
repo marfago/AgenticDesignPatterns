@@ -5,26 +5,25 @@
 
 import os
 import json
+import logging
 from typing import Tuple, Dict, Any, List
 
 import google.generativeai as genai
 
 # --- Configuration ---
-# Ensure your Google Cloud project and API key are configured.
-# For local development, you can set GOOGLE_API_KEY as an environment variable.
-# genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+# Set up logging for observability. Set to logging.INFO to see detailed guardrail logs.
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# For demonstration, we'll assume the API key is set up or use a placeholder
-# In a real application, use secure methods for API key management.
+# Ensure your Google Cloud project and API key are configured.
 if not os.environ.get("GOOGLE_API_KEY"):
-    print("WARNING: GOOGLE_API_KEY environment variable not set. "
-          "Please set it or configure Application Default Credentials.")
-    # This is a placeholder for demonstration. DO NOT use in production.
-    # genai.configure(api_key="YOUR_API_KEY_HERE") 
+    logging.error("GOOGLE_API_KEY environment variable not set. Please set it to run the example.")
+    exit(1)
+genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+
 
 # Define the LLM to be used as a content policy enforcer
 # Using a fast, cost-effective model like Gemini Flash is ideal for guardrails.
-CONTENT_POLICY_MODEL = "gemini-2.0-flash" # Consider "gemini-pro" for higher accuracy if needed
+CONTENT_POLICY_MODEL = "gemini-2.0-flash"
 policy_enforcer_model = genai.GenerativeModel(CONTENT_POLICY_MODEL)
 
 # --- AI Content Policy Prompt ---
@@ -94,11 +93,8 @@ def analyze_input_with_policy_enforcer(user_input: str) -> Tuple[bool, str, List
 
     Returns:
         A tuple: (is_compliant, analysis_message, triggered_policies).
-        is_compliant is True if the input adheres to policies, False otherwise.
-        analysis_message provides the summary of the evaluation.
-        triggered_policies is a list of strings describing violated policies.
     """
-    print(f"Analyzing input with policy enforcer: '{user_input}'")
+    logging.info(f"Analyzing input with policy enforcer: '{user_input}'")
     try:
         # Construct the full prompt for the policy enforcer LLM
         full_prompt = f"{SAFETY_GUARDRAIL_PROMPT}\n\nInput for Review: \"{user_input}\""
@@ -106,15 +102,14 @@ def analyze_input_with_policy_enforcer(user_input: str) -> Tuple[bool, str, List
         # Generate content using the policy enforcer model
         response = policy_enforcer_model.generate_content(full_prompt)
 
-        # Extract the text response, assuming it's a single part
+        # Extract the text response
         policy_output_text = response.text.strip()
-        print(f"Policy Enforcer raw output: {policy_output_text}")
+        logging.info(f"Policy Enforcer raw output: {policy_output_text}")
 
         # Extract JSON from markdown code block if present
         if policy_output_text.startswith("```json") and policy_output_text.endswith("```"):
             policy_output_text = policy_output_text[len("```json"): -len("```")].strip()
         elif policy_output_text.startswith("```") and policy_output_text.endswith("```"):
-            # Handle generic code blocks if not specifically json
             policy_output_text = policy_output_text[len("```"): -len("```")].strip()
 
         # Attempt to parse the JSON output
@@ -125,26 +120,47 @@ def analyze_input_with_policy_enforcer(user_input: str) -> Tuple[bool, str, List
         triggered_policies = policy_decision.get("triggered_policies", [])
 
         if compliance_status == "non-compliant":
-            print(f"ALERT: Input deemed NON-COMPLIANT by policy enforcer: {analysis_summary}. Triggered policies: {triggered_policies}")
-            return False, f"Input rejected by policy enforcer: {analysis_summary}", triggered_policies
+            logging.warning(f"Input deemed NON-COMPLIANT: {analysis_summary}. Triggered policies: {triggered_policies}")
+            return False, analysis_summary, triggered_policies
         elif compliance_status == "compliant":
-            print(f"STATUS: Input deemed COMPLIANT by policy enforcer: {analysis_summary}")
-            return True, "Input passed content policy checks.", []
+            logging.info(f"Input deemed COMPLIANT: {analysis_summary}")
+            return True, analysis_summary, []
         else:
-            print(f"ERROR: Policy enforcer returned unexpected decision format: {policy_output_text}")
+            logging.error(f"Policy enforcer returned unexpected decision format: {policy_output_text}")
             return False, "Policy enforcer returned an unparseable or unexpected decision.", []
 
     except json.JSONDecodeError as e:
-        print(f"ERROR: Failed to parse policy enforcer LLM output as JSON: {e}. Raw output: {policy_output_text}")
+        logging.error(f"Failed to parse LLM output as JSON: {e}. Raw output: {policy_output_text}")
         return False, f"Policy enforcer output was not valid JSON. Error: {e}", []
     except Exception as e:
-        print(f"ERROR: An unexpected error occurred during policy evaluation: {e}")
+        logging.error(f"An unexpected error occurred during policy evaluation: {e}")
         return False, f"An internal error occurred during policy check: {e}", []
+
+def print_test_case_result(test_number: int, user_input: str, is_compliant: bool, message: str, triggered_policies: List[str]):
+    """Formats and prints the result of a single test case."""
+    print("=" * 60)
+    print(f"📋 TEST CASE {test_number}: EVALUATING INPUT")
+    print(f"Input: '{user_input}'")
+    print("-" * 60)
+    
+    if is_compliant:
+        print("✅ RESULT: COMPLIANT")
+        print(f"   Summary: {message}")
+        print("   Action: Primary AI can safely proceed with this input.")
+    else:
+        print("❌ RESULT: NON-COMPLIANT")
+        print(f"   Summary: {message}")
+        if triggered_policies:
+            print("   Triggered Policies:")
+            for policy in triggered_policies:
+                print(f"     - {policy}")
+        print("   Action: Input blocked. Primary AI will not process this request.")
+    print("=" * 60 + "\n")
 
 def main():
     """Demonstrates the LLM-based content policy enforcer."""
     print("--- LLM-based Content Policy Enforcer Example ---")
-    print("This example uses a separate LLM to pre-screen user inputs against defined safety policies.")
+    print("This example uses a separate LLM to pre-screen user inputs against defined safety policies.\n")
 
     test_cases = [
         "What is the capital of France?", # Compliant
@@ -158,17 +174,8 @@ def main():
     ]
 
     for i, test_input in enumerate(test_cases):
-        print(f"\n--- Test Case {i+1}: '{test_input}' ---")
         is_compliant, message, triggered_policies = analyze_input_with_policy_enforcer(test_input)
-        
-        if is_compliant:
-            print(f"Final Outcome: Input is COMPLIANT. Primary AI can proceed. Message: {message}")
-        else:
-            print(f"Final Outcome: Input is NON-COMPLIANT. Primary AI should NOT proceed. Message: {message}")
-            if triggered_policies:
-                print(f"Triggered Policies: {', '.join(triggered_policies)}")
-            
-        print("-" * 50)
+        print_test_case_result(i + 1, test_input, is_compliant, message, triggered_policies)
 
 if __name__ == "__main__":
     main()
